@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Integration Calculator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.0/math.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #34495e;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        .row {
+            display: flex;
+            gap: 15px;
+        }
+        .row .input-group {
+            flex: 1;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .result-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f4fd;
+            border-left: 5px solid #3498db;
+            border-radius: 4px;
+        }
+        .result-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        .result-value {
+            font-size: 20px;
+            color: #2980b9;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .error {
+            background-color: #fde8e8;
+            border-left: 5px solid #e74c3c;
+            color: #c0392b;
+        }
+        canvas {
+            margin-top: 20px;
+            max-width: 100%;
+        }
+        .hint {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Definite Integration Calculator</h2>
+    
+    <div class="input-group">
+        <label for="function">Function f(x)</label>
+        <input type="text" id="function" value="x^2 - 2*x" placeholder="e.g., x^2, sin(x), 3*x + 5">
+        <div class="hint">Use * for multiplication (e.g., 2*x) and ^ for powers (e.g., x^2)</div>
+    </div>
+    
+    <div class="row">
+        <div class="input-group">
+            <label for="limit-a">Lower Limit (a)</label>
+            <input type="number" id="limit-a" value="0" step="any">
+        </div>
+        <div class="input-group">
+            <label for="limit-b">Upper Limit (b)</label>
+            <input type="number" id="limit-b" value="3" step="any">
+        </div>
+    </div>
+    
+    <button onclick="calculateIntegration()">Calculate & Plot</button>
+    
+    <div id="error-box" class="result-box error" style="display: none;"></div>
+    
+    <div id="result-box" class="result-box" style="display: none;">
+        <div class="result-title">Definite Integral Result:</div>
+        <div id="result-value" class="result-value">0</div>
+    </div>
+    
+    <canvas id="myChart"></canvas>
+</div>
+
+<script>
+    let myChart = null;
+
+    function calculateIntegration() {
+        const formula = document.getElementById('function').value;
+        const a = parseFloat(document.getElementById('limit-a').value);
+        const b = parseFloat(document.getElementById('limit-b').value);
+        
+        const errorBox = document.getElementById('error-box');
+        const resultBox = document.getElementById('result-box');
+        const resultValue = document.getElementById('result-value');
+        
+        // Reset views
+        errorBox.style.display = 'none';
+        resultBox.style.display = 'none';
+
+        try {
+            // Compile the math expression using math.js
+            const expr = math.compile(formula);
+            
+            // 1. Calculate Definite Integral using Simpson's Rule (Numerical Approximation)
+            const n = 1000; // number of intervals (even number)
+            const h = (b - a) / n;
+            let sum = expr.evaluate({x: a}) + expr.evaluate({x: b});
+            
+            for (let i = 1; i < n; i++) {
+                const x = a + i * h;
+                if (i % 2 === 0) {
+                    sum += 2 * expr.evaluate({x: x});
+                } else {
+                    sum += 4 * expr.evaluate({x: x});
+                }
+            }
+            const integralResult = (h / 3) * sum;
+            
+            if (isNaN(integralResult)) {
+                throw new Error("Calculation resulted in an undefined value. Check your function limits.");
+            }
+
+            // Display Result rounded to 4 decimal places
+            resultValue.innerHTML = `∫ f(x) dx = <strong>${integralResult.toFixed(4)}</strong>`;
+            resultBox.style.display = 'block';
+            
+            // 2. Generate Data for Charting
+            generateChart(expr, a, b);
+
+        } catch (error) {
+            errorBox.innerText = "Error: " + error.message;
+            errorBox.style.display = 'block';
+        }
+    }
+
+    function generateChart(compiledExpr, a, b) {
+        // Pad graph slightly wider than limits for aesthetic context
+        const padding = Math.abs(b - a) * 0.3 || 1; 
+        const startX = a - padding;
+        const endX = b + padding;
+        
+        const labels = [];
+        const mainDatasetData = [];
+        const integralDatasetData = [];
+
+        const points = 150;
+        const step = (endX - startX) / points;
+
+        for (let i = 0; i <= points; i++) {
+            const currentX = startX + (i * step);
+            let currentY = 0;
+            
+            try {
+                currentY = compiledExpr.evaluate({x: currentX});
+            } catch(e) {
+                currentY = null;
+            }
+
+            labels.push(currentX.toFixed(2));
+            mainDatasetData.push(currentY);
+
+            // If x is within the limits of integration [a, b], map it to the shade area
+            if (currentX >= a && currentX <= b) {
+                integralDatasetData.push(currentY);
+            } else {
+                integralDatasetData.push(null); // Out of bounds, won't shade
+            }
+        }
+
+        // Destroy previous chart instance if it exists to prevent overlapping redraws
+        if (myChart) {
+            myChart.destroy();
+        }
+
+        const ctx = document.getElementById('myChart').getContext('2d');
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'f(x)',
+                        data: mainDatasetData,
+                        borderColor: '#2c3e50',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false
+                    },
+                    {
+                        label: 'Integrated Area',
+                        data: integralDatasetData,
+                        backgroundColor: 'rgba(52, 152, 219, 0.3)',
+                        borderColor: 'transparent',
+                        pointRadius: 0,
+                        fill: 'origin', // fills to y=0 line
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'X axis' },
+                        ticks: { maxTicksLimit: 10 }
+                    },
+                    y: {
+                        title: { display: true, text: 'Y axis' }
+                    }
+                },
+                plugins: {
+                    legend: { display: true }
+                }
+            }
+        });
+    }
+
+    // Run once on load to show initial example
+    window.onload = calculateIntegration;
+</script>
+
+</body>
+</html>
